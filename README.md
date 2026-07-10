@@ -1,117 +1,117 @@
 # claude-mode
 
-Gerenciador de modos por projeto para manter simultaneamente instalados:
+Per-project mode manager that keeps both installed simultaneously:
 
-- o skillset Nori `senior-swe`;
-- o plugin `superpowers` do Claude Code.
+- the Nori `senior-swe` skillset;
+- the Claude Code `superpowers` plugin.
 
-A ferramenta garante que apenas um comportamento fique ativo de cada vez.
+The tool ensures only one behavior is active at a time.
 
-## Modos
+## Modes
 
-| Modo | Nori | Superpowers |
+| Mode | Nori | Superpowers |
 |---|---|---|
-| `senior` | `senior-swe` ativo | instalado, desabilitado no escopo `local` |
-| `superpowers` | `claude-mode-neutral` ativo | habilitado no escopo `local` |
-| `none` | configuração Nori do projeto removida | componente criado pela ferramenta removido ou estado preexistente restaurado |
+| `senior` | `senior-swe` active | installed, disabled at `local` scope |
+| `superpowers` | `claude-mode-neutral` active | enabled at `local` scope |
+| `none` | project Nori config removed | tool-created component removed or preexisting state restored |
 
-O skillset `claude-mode-neutral` é vazio e existe apenas para retirar as instruções do `senior-swe` sem desinstalar o Nori.
+The `claude-mode-neutral` skillset is empty and exists only to remove `senior-swe` instructions without uninstalling Nori.
 
-## Requisitos
+## Requirements
 
-- Linux ou macOS;
-- Bash 3.2 ou superior;
+- Linux or macOS;
+- Bash 3.2 or later;
 - Python 3;
-- Claude Code com suporte a `claude plugin`;
-- Git, salvo ao usar `--project` com `--allow-non-git`;
-- Node.js/npm quando o Nori ainda não estiver instalado.
+- Claude Code with `claude plugin` support;
+- Git, unless using `--project` with `--allow-non-git`;
+- Node.js/npm when Nori is not yet installed.
 
-Documentação consultada:
+Documentation consulted:
 
 - https://code.claude.com/docs/en/plugins-reference
 - https://github.com/tilework-tech/nori-skillsets
 - https://github.com/obra/superpowers
 
-## Instalação da ferramenta
+## Tool Installation
 
-No diretório extraído:
+In the extracted directory:
 
 ```bash
 ./install.sh
 ```
 
-Por padrão, os arquivos são copiados para:
+By default, files are copied to:
 
 ```text
 ~/.local/lib/claude-mode
 ~/.local/bin/claude-mode
 ```
 
-Garanta que `~/.local/bin` esteja no `PATH`.
+Ensure `~/.local/bin` is in your `PATH`.
 
-Também é possível executar diretamente do repositório:
+You can also run directly from the repository:
 
 ```bash
 ./bin/claude-mode --help
 ```
 
-## Instalação concomitante no projeto
+## Project Installation
 
-Execute na raiz do projeto:
+Run at the project root:
 
 ```bash
 claude-mode install
 ```
 
-Em um diretório sem Git:
+In a directory without Git:
 
 ```bash
-claude-mode --project /caminho/do/projeto --allow-non-git install
+claude-mode --project /path/to/project --allow-non-git install
 ```
 
-A instalação:
+The installation:
 
-1. registra o estado original;
-2. instala o Nori via npm somente quando necessário;
-3. inicializa o Nori com o diretório do projeto explicitamente informado;
-4. baixa `senior-swe` quando ausente;
-5. cria o skillset vazio `claude-mode-neutral`;
-6. instala Superpowers no escopo Claude Code `local`;
-7. desabilita Superpowers;
-8. ativa `senior-swe`;
-9. verifica o modo observado.
+1. records the original state;
+2. installs Nori via npm only when necessary;
+3. initializes Nori with the project directory explicitly provided;
+4. downloads `senior-swe` when absent;
+5. creates the empty `claude-mode-neutral` skillset;
+6. installs Superpowers at Claude Code `local` scope;
+7. disables Superpowers;
+8. activates `senior-swe`;
+9. verifies the observed mode.
 
-A operação é idempotente. Repetir `install` não duplica o plugin nem o skillset neutro.
+The operation is idempotent. Repeating `install` does not duplicate the plugin or the neutral skillset.
 
-## Chaveamento
+## Switching
 
-### Ativar o perfil generalista
+### Activate the senior profile
 
 ```bash
 claude-mode use senior
 ```
 
-A ordem é:
+The order is:
 
 ```text
 Superpowers OFF → Nori senior-swe
 ```
 
-### Ativar a metodologia Superpowers
+### Activate the Superpowers methodology
 
 ```bash
 claude-mode use superpowers
 ```
 
-A ordem é:
+The order is:
 
 ```text
 Nori claude-mode-neutral → Superpowers ON
 ```
 
-Depois de qualquer chaveamento, encerre a sessão atual e inicie uma nova sessão do Claude Code. O histórico da conversa pode manter instruções que já entraram no contexto.
+After any switch, end the current session and start a new Claude Code session. Conversation history may retain instructions that have already entered the context.
 
-## Estado e diagnóstico
+## State and Diagnostics
 
 ```bash
 claude-mode status
@@ -120,18 +120,18 @@ claude-mode doctor
 claude-mode doctor --json
 ```
 
-`status` consulta o estado real do marcador Nori e de `claude plugin list --json`; ele não confia apenas no arquivo salvo.
+`status` queries the actual state of the Nori marker and `claude plugin list --json`; it does not rely solely on the saved file.
 
-`doctor` retorna código diferente de zero quando encontra problemas, incluindo:
+`doctor` returns a non-zero exit code when it finds problems, including:
 
-- mais de uma instalação do Superpowers;
-- Superpowers fora do escopo `local`;
-- `senior-swe` e Superpowers ativos simultaneamente;
-- modo salvo divergente do observado;
-- skillset neutro modificado;
-- ferramentas ausentes.
+- more than one Superpowers installation;
+- Superpowers outside `local` scope;
+- `senior-swe` and Superpowers simultaneously active;
+- saved mode diverging from observed mode;
+- modified neutral skillset;
+- missing tools.
 
-## Simulação
+## Dry Run
 
 ```bash
 claude-mode --dry-run install
@@ -139,46 +139,46 @@ claude-mode --dry-run use superpowers
 claude-mode --dry-run --yes uninstall
 ```
 
-O modo de simulação não cria lock, estado ou arquivos de configuração.
+Dry-run mode does not create locks, state, or configuration files.
 
-## Desinstalação limpa
+## Clean Uninstall
 
 ```bash
 claude-mode --yes uninstall
 ```
 
-A desinstalação normal:
+Normal uninstall:
 
-- remove a configuração Nori do projeto;
-- remove `claude-mode-neutral` somente quando foi criado pela ferramenta e continua intacto;
-- desinstala Superpowers somente quando foi instalado pela ferramenta;
-- restaura o estado habilitado/desabilitado quando o plugin já existia;
-- preserva `senior-swe`;
-- preserva Nori globalmente;
-- mantém estado, logs e backups para auditoria.
+- removes Nori project configuration;
+- removes `claude-mode-neutral` only when it was created by the tool and remains intact;
+- uninstalls Superpowers only when it was installed by the tool;
+- restores the enabled/disabled state when the plugin already existed;
+- preserves `senior-swe`;
+- preserves Nori globally;
+- retains state, logs, and backups for audit.
 
-Para remover também o pacote global do Nori:
+To also remove the global Nori package:
 
 ```bash
 claude-mode --yes --purge-global uninstall
 ```
 
-A purga é recusada quando:
+Purge is refused when:
 
-- o Nori não foi instalado por esta ferramenta;
-- existe outro projeto conhecido com `claude-mode` instalado.
+- Nori was not installed by this tool;
+- another known project still has `claude-mode` installed.
 
-A ferramenta nunca executa `nori-skillsets factory-reset claude-code`.
+The tool never runs `nori-skillsets factory-reset claude-code`.
 
-## Estado persistente e backups
+## Persistent State and Backups
 
-O estado fica em:
+State is stored at:
 
 ```text
-${XDG_STATE_HOME:-$HOME/.local/state}/claude-mode/<hash-do-projeto>/
+${XDG_STATE_HOME:-$HOME/.local/state}/claude-mode/<project-hash>/
 ```
 
-Arquivos principais:
+Key files:
 
 ```text
 state.json
@@ -189,83 +189,96 @@ backups/claude-settings.merged.json
 backups/settings-conflicts.json
 ```
 
-As gravações JSON são atômicas e usam permissões restritas.
+JSON writes are atomic and use restrictive permissions.
 
-## Preservação de `settings.json`
+## `settings.json` Preservation
 
-O Nori modifica `~/.claude/settings.json`, mesmo em uma instalação associada a um projeto. Para evitar que o mecanismo de backup do Nori reverta alterações posteriores, `claude-mode` realiza uma mesclagem de três vias:
+Nori modifies `~/.claude/settings.json`, even in a project-scoped installation. To prevent Nori's backup mechanism from reverting later changes, `claude-mode` performs a three-way merge:
 
 ```text
-estado anterior ao Nori
-estado imediatamente depois do Nori
-estado atual antes da desinstalação
+state before Nori
+state immediately after Nori
+current state before uninstall
 ```
 
-Alterações do usuário em chaves não tocadas pelo Nori são mantidas. Em conflitos escalares, o valor atual do usuário é preservado e o caminho aparece em `settings-conflicts.json`.
+User changes to keys untouched by Nori are preserved. In scalar conflicts, the current user value is kept and the path appears in `settings-conflicts.json`.
 
 ## Rollback
 
-Operações mutáveis criam uma fotografia transacional de `~/.claude/settings.json` e registram o modo anterior. Quando uma operação falha, o handler de saída tenta:
+Mutable operations create a transactional snapshot of `~/.claude/settings.json` and record the previous mode. When an operation fails, the exit handler attempts:
 
-1. restaurar a fotografia das configurações;
-2. restaurar o skillset Nori anterior;
-3. restaurar o estado anterior do plugin;
-4. remover um plugin criado durante uma instalação incompleta;
-5. liberar o lock.
+1. restore the settings snapshot;
+2. restore the previous Nori skillset;
+3. restore the previous plugin state;
+4. remove a plugin created during an incomplete install;
+5. release the lock.
 
-O rollback é de melhor esforço. Depois de uma falha:
+Rollback is best-effort. After a failure:
 
 ```bash
 claude-mode doctor
 claude-mode status --json
 ```
 
-## Concorrência
+## Concurrency
 
-Cada projeto usa um lock baseado em diretório. Locks cujo PID ainda está vivo bloqueiam a operação. Locks abandonados são removidos na próxima execução.
+Each project uses a directory-based lock. Locks whose PID is still alive block the operation. Abandoned locks are removed on the next run.
 
-## Segurança
+## Safety
 
-- caminhos são canonicalizados;
-- `/` e `$HOME` são recusados como raiz de projeto;
-- o plugin é manipulado apenas pela CLI oficial do Claude Code;
-- o registro interno de plugins não é editado diretamente;
-- ações globais exigem `--purge-global --yes`;
-- múltiplas instalações do Superpowers causam abortagem, não escolha arbitrária;
-- o skillset neutro modificado nunca é apagado automaticamente;
-- expansões de caminhos são colocadas entre aspas;
-- o script usa `set -Eeuo pipefail` e `umask 077`.
+- paths are canonicalized;
+- `/` and `$HOME` are refused as project roots;
+- the plugin is manipulated only through the official Claude Code CLI;
+- the internal plugin registry is never edited directly;
+- global actions require `--purge-global --yes`;
+- multiple Superpowers installations cause an abort, not an arbitrary choice;
+- a modified neutral skillset is never automatically deleted;
+- path expansions are quoted;
+- the script uses `set -Eeuo pipefail` and `umask 077`.
 
-## Testes
+## Development
+
+### Tests
 
 ```bash
 make test
 make verify
 ```
 
-Os testes usam executáveis falsos em um `PATH` temporário e não alteram instalações reais do Claude Code, Nori ou npm.
+Tests use fake executables in a temporary `PATH` and do not touch real Claude Code, Nori, or npm installations.
 
-Cobertura comportamental atual:
+Current behavioral coverage (11 tests):
 
-- instalação inicial;
-- idempotência;
-- chaveamento nos dois sentidos;
-- caminhos com espaços;
-- detecção de ativação simultânea;
-- múltiplas instalações conflitantes;
-- `--dry-run` sem mutações;
-- preservação de alterações em `settings.json`;
-- rollback de chaveamento com falha;
-- restauração de plugin preexistente;
-- status sem instalação.
+- initial install;
+- idempotency;
+- bidirectional switching;
+- paths with spaces;
+- simultaneous activation detection;
+- conflicting multiple installations;
+- `--dry-run` without mutations;
+- `settings.json` change preservation;
+- failed switch rollback;
+- preexisting plugin restoration;
+- status without install;
+- json_tool error context.
 
-## Limitações conhecidas
+### Code Quality
 
-- A suíte automatizada usa mocks. Faça inicialmente `--dry-run` e depois valide com `doctor` na sua versão real do Claude Code e do Nori.
-- O formato JSON de `claude plugin list --json` é normalizado defensivamente, mas versões futuras podem introduzir um formato incompatível.
-- O Nori mantém parte de seu comportamento em configuração global do Claude Code; outros projetos Nori devem ser considerados antes de uma purga global.
-- A mesclagem de listas JSON remove entradas adicionadas pelo Nori usando igualdade estrutural. Uma alteração manual dentro da mesma entrada pode ser preservada como conflito.
+The project enforces:
 
-## Licença
+- **ShellCheck**: zero warnings on all scripts (`shellcheck -x`);
+- **shfmt**: consistent formatting (`shfmt -d -i 2 -ci`);
+- **Bash syntax**: `bash -n` on all `.sh` files;
+- **Python**: `python3 -m py_compile` on `lib/json_tool.py`;
+- **EditorConfig**: `.editorconfig` for cross-editor consistency.
+
+## Known Limitations
+
+- The automated suite uses mocks. Run `--dry-run` first, then validate with `doctor` on your real Claude Code and Nori installations.
+- The JSON format of `claude plugin list --json` is defensively normalized, but future versions may introduce an incompatible format.
+- Nori keeps part of its behavior in global Claude Code configuration; other Nori projects should be considered before a global purge.
+- The JSON list merge removes entries added by Nori using structural equality. A manual change within the same entry may be preserved as a conflict.
+
+## License
 
 MIT.

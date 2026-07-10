@@ -64,8 +64,8 @@ cm_exit_handler() {
     if command -v nori-skillsets >/dev/null 2>&1; then
       if [[ -n "$CM_TX_PREV_MARKER" ]]; then
         case "$CM_TX_PREV_MARKER" in
-          */senior-swe|senior-swe) cm_nori_switch senior-swe >/dev/null 2>&1 || true ;;
-          */claude-mode-neutral|claude-mode-neutral) cm_nori_switch "$CM_NEUTRAL_NAME" >/dev/null 2>&1 || true ;;
+          */senior-swe | senior-swe) cm_nori_switch senior-swe >/dev/null 2>&1 || true ;;
+          */claude-mode-neutral | claude-mode-neutral) cm_nori_switch "$CM_NEUTRAL_NAME" >/dev/null 2>&1 || true ;;
         esac
       elif [[ "$CM_TX_ROLLBACK_NORI" == 1 ]]; then
         cm_nori_clear_project >/dev/null 2>&1 || true
@@ -162,8 +162,8 @@ cm_status_json() {
 
   local senior=false neutral=false
   case "$marker" in
-    */senior-swe|senior-swe) senior=true ;;
-    */claude-mode-neutral|claude-mode-neutral) neutral=true ;;
+    */senior-swe | senior-swe) senior=true ;;
+    */claude-mode-neutral | claude-mode-neutral) neutral=true ;;
     '') ;;
     *) issues+=("unknown Nori skillset is active: $marker") ;;
   esac
@@ -237,9 +237,8 @@ cm_install() {
   cm_require_cmd claude
   cm_begin_transaction
 
-  local existing_state=false continuing_install=false baseline_existed=false
+  local continuing_install=false baseline_existed=false
   if cm_state_exists; then
-    existing_state=true
     [[ "$(cm_state_bool installed false)" == true ]] && continuing_install=true
   fi
   if [[ "$CM_DRY_RUN" == 1 ]]; then
@@ -366,13 +365,14 @@ cm_doctor() {
     extra+=("neutral Nori skillset is modified or invalid")
   fi
   if ((${#extra[@]})); then
-    json=$(STATUS_JSON="$json" EXTRA="$(printf '%s\n' "${extra[@]}")" python3 -S - <<'PY'
+    json=$(
+      STATUS_JSON="$json" EXTRA="$(printf '%s\n' "${extra[@]}")" python3 -S - <<'PY'
 import json,os
 s=json.loads(os.environ['STATUS_JSON'])
 s['issues'].extend([x for x in os.environ['EXTRA'].splitlines() if x])
 print(json.dumps(s,indent=2,sort_keys=True))
 PY
-)
+    )
   fi
   issues_count=$(STATUS_JSON="$json" python3 -S -c 'import json,os; print(len(json.loads(os.environ["STATUS_JSON"])["issues"]))')
   if [[ "$CM_OUTPUT_JSON" == 1 ]]; then printf '%s\n' "$json"; else cm_print_status_human "$json"; fi
@@ -385,20 +385,27 @@ cm_other_installed_states() {
   python3 -S - "$state_root" "$CM_STATE_FILE" <<'PY'
 import json,os,sys
 root,current=sys.argv[1:]
+found=None
 for base,_,files in os.walk(root):
     if 'state.json' not in files: continue
     path=os.path.join(base,'state.json')
     if os.path.realpath(path)==os.path.realpath(current): continue
     try:
         if json.load(open(path)).get('installed'):
-            print(path); raise SystemExit(0)
+            found=path; break
     except Exception: pass
-raise SystemExit(1)
+if found:
+    print(found)
+    sys.exit(0)
+sys.exit(1)
 PY
 }
 
 cm_uninstall() {
-  cm_state_exists || { cm_info 'nothing installed for this project'; return 0; }
+  cm_state_exists || {
+    cm_info 'nothing installed for this project'
+    return 0
+  }
   cm_begin_transaction
   local plugin_id plugin_owned plugin_pre neutral_owned nori_owned baseline_existed
   plugin_id=$(cm_state_get plugin.id "$(cm_json_string "$CM_PLUGIN_DEFAULT")")
@@ -440,11 +447,10 @@ cm_uninstall() {
   if [[ -f "$CM_BASE_SETTINGS" && -f "$CM_POST_SETTINGS" ]]; then
     python3 -S "$CM_JSON_TOOL" settings-merge "$CM_BASE_SETTINGS" "$CM_POST_SETTINGS" "$CM_CURRENT_SETTINGS" "$CM_MERGED_SETTINGS" --conflicts "$CM_CONFLICTS_FILE"
     cm_copy_json_snapshot "$CM_MERGED_SETTINGS" "$CM_CLAUDE_SETTINGS"
-    if [[ "$baseline_existed" == false ]] && python3 -S - "$CM_CLAUDE_SETTINGS" <<'PY'
+    if [[ "$baseline_existed" == false ]] && python3 -S - "$CM_CLAUDE_SETTINGS" <<'PY'; then
 import json,sys
 raise SystemExit(0 if json.load(open(sys.argv[1]))=={} else 1)
 PY
-    then
       rm -f "$CM_CLAUDE_SETTINGS"
     fi
     local conflicts
@@ -478,25 +484,65 @@ POSITIONAL=()
 
 while (($#)); do
   case "$1" in
-    --project) [[ $# -ge 2 ]] || cm_die '--project requires a path'; CM_PROJECT_ARG=$2; shift 2 ;;
-    --allow-non-git) CM_ALLOW_NON_GIT=1; shift ;;
-    --dry-run) CM_DRY_RUN=1; shift ;;
-    --verbose) CM_VERBOSE=1; shift ;;
-    --yes|-y) CM_ASSUME_YES=1; shift ;;
-    --json) CM_OUTPUT_JSON=1; shift ;;
-    --purge-global) CM_PURGE_GLOBAL=1; shift ;;
-    --version|-V) printf '%s\n' "$CM_VERSION"; exit 0 ;;
-    --help|-h) usage; exit 0 ;;
-    --) shift; while (($#)); do POSITIONAL+=("$1"); shift; done ;;
+    --project)
+      [[ $# -ge 2 ]] || cm_die '--project requires a path'
+      CM_PROJECT_ARG=$2
+      shift 2
+      ;;
+    --allow-non-git)
+      CM_ALLOW_NON_GIT=1
+      shift
+      ;;
+    --dry-run)
+      CM_DRY_RUN=1
+      shift
+      ;;
+    --verbose)
+      CM_VERBOSE=1
+      shift
+      ;;
+    --yes | -y)
+      CM_ASSUME_YES=1
+      shift
+      ;;
+    --json)
+      CM_OUTPUT_JSON=1
+      shift
+      ;;
+    --purge-global)
+      CM_PURGE_GLOBAL=1
+      shift
+      ;;
+    --version | -V)
+      printf '%s\n' "$CM_VERSION"
+      exit 0
+      ;;
+    --help | -h)
+      usage
+      exit 0
+      ;;
+    --)
+      shift
+      while (($#)); do
+        POSITIONAL+=("$1")
+        shift
+      done
+      ;;
     -*) cm_die "unknown option: $1" ;;
-    *) if [[ -z "$COMMAND" ]]; then COMMAND=$1; else POSITIONAL+=("$1"); fi; shift ;;
+    *)
+      if [[ -z "$COMMAND" ]]; then COMMAND=$1; else POSITIONAL+=("$1"); fi
+      shift
+      ;;
   esac
 done
 
 [[ -n "$COMMAND" ]] || COMMAND=help
 case "$COMMAND" in
-  help) usage; exit 0 ;;
-  install|use|status|doctor|uninstall) ;;
+  help)
+    usage
+    exit 0
+    ;;
+  install | use | status | doctor | uninstall) ;;
   *) cm_die "unknown command: $COMMAND" ;;
 esac
 
@@ -505,9 +551,24 @@ CM_PROJECT=$(cm_resolve_project "$CM_PROJECT_ARG" "$CM_ALLOW_NON_GIT")
 cm_state_init_paths
 
 case "$COMMAND" in
-  install) [[ ${#POSITIONAL[@]} -eq 0 ]] || cm_die 'install takes no positional arguments'; cm_install ;;
-  use) [[ ${#POSITIONAL[@]} -eq 1 ]] || cm_die 'use requires exactly one mode'; cm_use "${POSITIONAL[0]}" ;;
-  status) [[ ${#POSITIONAL[@]} -eq 0 ]] || cm_die 'status takes no positional arguments'; cm_status ;;
-  doctor) [[ ${#POSITIONAL[@]} -eq 0 ]] || cm_die 'doctor takes no positional arguments'; cm_doctor ;;
-  uninstall) [[ ${#POSITIONAL[@]} -eq 0 ]] || cm_die 'uninstall takes no positional arguments'; cm_uninstall ;;
+  install)
+    [[ ${#POSITIONAL[@]} -eq 0 ]] || cm_die 'install takes no positional arguments'
+    cm_install
+    ;;
+  use)
+    [[ ${#POSITIONAL[@]} -eq 1 ]] || cm_die 'use requires exactly one mode'
+    cm_use "${POSITIONAL[0]}"
+    ;;
+  status)
+    [[ ${#POSITIONAL[@]} -eq 0 ]] || cm_die 'status takes no positional arguments'
+    cm_status
+    ;;
+  doctor)
+    [[ ${#POSITIONAL[@]} -eq 0 ]] || cm_die 'doctor takes no positional arguments'
+    cm_doctor
+    ;;
+  uninstall)
+    [[ ${#POSITIONAL[@]} -eq 0 ]] || cm_die 'uninstall takes no positional arguments'
+    cm_uninstall
+    ;;
 esac

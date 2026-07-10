@@ -6,11 +6,17 @@ cm_state_init_paths() {
   CM_STATE_DIR="$root/claude-mode/$CM_PROJECT_KEY"
   CM_STATE_FILE="$CM_STATE_DIR/state.json"
   CM_BACKUP_DIR="$CM_STATE_DIR/backups"
+  # shellcheck disable=SC2034
   CM_BASE_SETTINGS="$CM_BACKUP_DIR/claude-settings.before.json"
+  # shellcheck disable=SC2034
   CM_POST_SETTINGS="$CM_BACKUP_DIR/claude-settings.after-nori.json"
+  # shellcheck disable=SC2034
   CM_CURRENT_SETTINGS="$CM_BACKUP_DIR/claude-settings.before-uninstall.json"
+  # shellcheck disable=SC2034
   CM_MERGED_SETTINGS="$CM_BACKUP_DIR/claude-settings.merged.json"
+  # shellcheck disable=SC2034
   CM_CONFLICTS_FILE="$CM_BACKUP_DIR/settings-conflicts.json"
+  # shellcheck disable=SC2034
   CM_CLAUDE_SETTINGS="$HOME/.claude/settings.json"
 }
 

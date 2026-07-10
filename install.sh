@@ -42,7 +42,7 @@ cp "$SOURCE_DIR/lib/"*.sh "$SOURCE_DIR/lib/json_tool.py" "$LIB_DIR/lib/"
 chmod 700 "$LIB_DIR/bin/claude-mode" "$LIB_DIR/lib/json_tool.py"
 chmod 600 "$LIB_DIR/lib/"*.sh
 
-cat > "$WRAPPER" <<EOF_WRAPPER
+cat >"$WRAPPER" <<EOF_WRAPPER
 #!/usr/bin/env bash
 exec "$LIB_DIR/bin/claude-mode" "\$@"
 EOF_WRAPPER

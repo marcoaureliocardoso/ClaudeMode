@@ -31,7 +31,7 @@ test_install_and_status() {
   setup_test_env
   project="$TEST_TMP/project"
   mkdir -p "$project"
-  printf '{"theme":"dark"}\n' > "$HOME/.claude/settings.json"
+  printf '{"theme":"dark"}\n' >"$HOME/.claude/settings.json"
 
   run_cli --project "$project" --allow-non-git --yes install
   assert_status 0
@@ -97,7 +97,7 @@ test_conflicting_plugin_installations_are_rejected() {
   setup_test_env
   project="$TEST_TMP/project"
   mkdir -p "$project"
-  cat > "$MOCK_CLAUDE_PLUGINS" <<'JSON'
+  cat >"$MOCK_CLAUDE_PLUGINS" <<'JSON'
 [
   {"id":"superpowers@claude-plugins-official","name":"superpowers","scope":"local","enabled":false},
   {"id":"superpowers@superpowers-marketplace","name":"superpowers","scope":"user","enabled":true}
@@ -124,7 +124,7 @@ test_uninstall_restores_user_settings_and_removes_owned_components() {
   setup_test_env
   project="$TEST_TMP/project"
   mkdir -p "$project"
-  printf '{"theme":"dark","editor":{"font":"mono"}}\n' > "$HOME/.claude/settings.json"
+  printf '{"theme":"dark","editor":{"font":"mono"}}\n' >"$HOME/.claude/settings.json"
   run_cli --project "$project" --allow-non-git --yes install
   assert_status 0
   python3 -S - "$HOME/.claude/settings.json" <<'PY'
@@ -161,7 +161,6 @@ test_status_without_install_reports_none() {
   assert_json "$LAST_OUTPUT" installed false
 }
 
-
 test_failed_switch_rolls_back_to_previous_mode() {
   setup_test_env
   project="$TEST_TMP/project"
@@ -183,7 +182,7 @@ test_preexisting_plugin_is_restored_on_uninstall() {
   setup_test_env
   project="$TEST_TMP/project"
   mkdir -p "$project"
-  cat > "$MOCK_CLAUDE_PLUGINS" <<'JSON'
+  cat >"$MOCK_CLAUDE_PLUGINS" <<'JSON'
 [{"id":"superpowers@claude-plugins-official","name":"superpowers","marketplace":"claude-plugins-official","scope":"local","enabled":true,"version":"6.1.1"}]
 JSON
   run_cli --project "$project" --allow-non-git --yes install
@@ -196,6 +195,18 @@ JSON
   run_cli --project "$project" --allow-non-git status --json
   assert_json "$LAST_OUTPUT" installed false
   assert_json "$LAST_OUTPUT" mode none
+}
+
+test_json_tool_errors_include_command_context() {
+  setup_test_env
+  printf '{invalid' >"$TEST_TMP/bad.json"
+  set +e
+  local out
+  out=$(python3 -S "$ROOT/lib/json_tool.py" state-get "$TEST_TMP/bad.json" some.path 2>&1)
+  local ec=$?
+  set -e
+  assert_eq 2 "$ec" "json_tool should exit 2 on parse errors"
+  assert_contains "$out" "state-get"
 }
 
 if [[ "${1:-}" == "--worker" ]]; then
@@ -215,6 +226,7 @@ CASE_LABELS=(
   status_without_install
   failed_switch_rolls_back
   preexisting_plugin_restored
+  json_tool_error_context
 )
 CASE_FUNCTIONS=(
   test_install_and_status
@@ -227,6 +239,7 @@ CASE_FUNCTIONS=(
   test_status_without_install_reports_none
   test_failed_switch_rolls_back_to_previous_mode
   test_preexisting_plugin_is_restored_on_uninstall
+  test_json_tool_errors_include_command_context
 )
 
 failures=0

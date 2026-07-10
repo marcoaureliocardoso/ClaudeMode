@@ -8,6 +8,7 @@ cm_nori_ensure_installed() {
   if command -v nori-skillsets >/dev/null 2>&1; then return 0; fi
   cm_require_cmd npm
   cm_run npm install -g nori-skillsets
+  # shellcheck disable=SC2034
   CM_NORI_INSTALLED_BY_TOOL=true
   hash -r
   [[ "$CM_DRY_RUN" == 1 ]] || command -v nori-skillsets >/dev/null 2>&1 || cm_die 'Nori installation completed but nori-skillsets is not in PATH'
@@ -19,7 +20,10 @@ cm_nori_profile_find() {
     "$HOME/.nori/profiles/personal/$name" \
     "$HOME/.nori/profiles/public/$name" \
     "$HOME/.nori/profiles/$name"; do
-    [[ -f "$candidate/nori.json" ]] && { printf '%s' "$candidate"; return 0; }
+    [[ -f "$candidate/nori.json" ]] && {
+      printf '%s' "$candidate"
+      return 0
+    }
   done
   return 1
 }
@@ -29,8 +33,10 @@ cm_nori_init() {
 }
 
 cm_nori_ensure_senior() {
+  # shellcheck disable=SC2034
   CM_SENIOR_PREEXISTING=false
   if cm_nori_profile_find senior-swe >/dev/null 2>&1; then
+    # shellcheck disable=SC2034
     CM_SENIOR_PREEXISTING=true
     return 0
   fi
@@ -43,7 +49,7 @@ cm_nori_write_neutral() {
   mkdir -p "$(dirname "$CM_NEUTRAL_DIR")"
   mkdir -p "$CM_NEUTRAL_DIR"
   tmp=$(mktemp "$CM_NEUTRAL_DIR/.nori.json.XXXXXX")
-  cat > "$tmp" <<EOF_JSON
+  cat >"$tmp" <<EOF_JSON
 {
   "description": "Empty compatibility skillset managed by claude-mode",
   "name": "$CM_NEUTRAL_NAME",
@@ -56,6 +62,7 @@ EOF_JSON
 }
 
 cm_nori_ensure_neutral() {
+  # shellcheck disable=SC2034
   CM_NEUTRAL_CREATED=false
   if [[ -d "$CM_NEUTRAL_DIR" ]]; then
     python3 -S "$CM_JSON_TOOL" validate-neutral "$CM_NEUTRAL_DIR" --name "$CM_NEUTRAL_NAME" || cm_die "existing $CM_NEUTRAL_NAME skillset is not empty or is not tool-owned"
@@ -66,6 +73,7 @@ cm_nori_ensure_neutral() {
   else
     cm_nori_write_neutral
   fi
+  # shellcheck disable=SC2034
   CM_NEUTRAL_CREATED=true
 }
 
@@ -76,7 +84,7 @@ cm_nori_switch() {
 
 cm_nori_marker() {
   local marker="$CM_PROJECT/.claude/.nori-managed"
-  [[ -f "$marker" ]] && cat "$marker" || true
+  if [[ -f "$marker" ]]; then cat "$marker"; fi || true
 }
 
 cm_nori_clear_project() {

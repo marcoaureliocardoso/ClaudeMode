@@ -34,7 +34,8 @@ assert_file_not_exists() {
 assert_json() {
   local json=$1 expr=$2 expected=$3
   local actual
-  actual=$(JSON_INPUT="$json" EXPR="$expr" python3 -S - <<'PY'
+  actual=$(
+    JSON_INPUT="$json" EXPR="$expr" python3 -S - <<'PY'
 import json, os
 obj=json.loads(os.environ['JSON_INPUT'])
 cur=obj
@@ -45,7 +46,7 @@ if isinstance(cur,bool): print(str(cur).lower())
 elif cur is None: print('null')
 else: print(cur)
 PY
-) || return 1
+  ) || return 1
   assert_eq "$expected" "$actual" "JSON expression $expr"
 }
 
@@ -61,13 +62,16 @@ run_test() {
   shift
   TESTS_RUN=$((TESTS_RUN + 1))
   printf 'TEST %s\n' "$name"
-  if ( set -e; "$@" ); then
+  if (
+    set -e
+    "$@"
+  ); then
     printf '  PASS\n'
   else
     TESTS_FAILED=$((TESTS_FAILED + 1))
   fi
   if [[ -n "${TEST_SUITE_TMP:-}" && -d "$TEST_SUITE_TMP" ]]; then
-    rm -rf "$TEST_SUITE_TMP"/*
+    rm -rf "${TEST_SUITE_TMP:?}"/*
   fi
 }
 

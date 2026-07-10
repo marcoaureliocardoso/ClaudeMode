@@ -13,7 +13,7 @@ cm_acquire_lock() {
   mkdir -p "$CM_STATE_DIR"
   CM_LOCK_DIR="$CM_STATE_DIR/lock"
   if mkdir "$CM_LOCK_DIR" 2>/dev/null; then
-    printf '%s\n' "$$" > "$CM_LOCK_DIR/pid"
+    printf '%s\n' "$$" >"$CM_LOCK_DIR/pid"
     CM_LOCK_HELD=1
     return 0
   fi
@@ -25,6 +25,6 @@ cm_acquire_lock() {
   cm_warn 'removing stale project lock'
   rm -rf "$CM_LOCK_DIR"
   mkdir "$CM_LOCK_DIR" || cm_die 'could not acquire project lock'
-  printf '%s\n' "$$" > "$CM_LOCK_DIR/pid"
+  printf '%s\n' "$$" >"$CM_LOCK_DIR/pid"
   CM_LOCK_HELD=1
 }

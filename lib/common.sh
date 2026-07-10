@@ -1,16 +1,20 @@
 #!/usr/bin/env bash
 
-CM_VERSION="0.1.0"
+# shellcheck disable=SC2034
+CM_VERSION="0.1.1"
 CM_DRY_RUN=${CM_DRY_RUN:-0}
 CM_VERBOSE=${CM_VERBOSE:-0}
 CM_ASSUME_YES=${CM_ASSUME_YES:-0}
 CM_ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 CM_JSON_TOOL="$CM_ROOT/lib/json_tool.py"
 
-cm_die() { printf 'claude-mode: ERROR: %s\n' "$*" >&2; exit 1; }
+cm_die() {
+  printf 'claude-mode: ERROR: %s\n' "$*" >&2
+  exit 1
+}
 cm_warn() { printf 'claude-mode: WARN: %s\n' "$*" >&2; }
 cm_info() { printf 'claude-mode: %s\n' "$*"; }
-cm_debug() { [[ "$CM_VERBOSE" == 1 ]] && printf 'claude-mode: DEBUG: %s\n' "$*" >&2 || true; }
+cm_debug() { if [[ "$CM_VERBOSE" == 1 ]]; then printf 'claude-mode: DEBUG: %s\n' "$*" >&2 || true; fi; }
 
 cm_quote_cmd() {
   local arg out=''
@@ -99,7 +103,7 @@ with os.fdopen(fd,'w',encoding='utf-8') as f:
 os.chmod(tmp,0o600); os.replace(tmp,dst)
 PY
   else
-    printf '{}\n' > "$target"
+    printf '{}\n' >"$target"
     chmod 600 "$target"
   fi
 }
