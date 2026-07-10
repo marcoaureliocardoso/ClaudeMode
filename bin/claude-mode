@@ -1,0 +1,513 @@
+#!/usr/bin/env bash
+set -Eeuo pipefail
+umask 077
+
+SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+ROOT=$(cd "$SCRIPT_DIR/.." && pwd)
+# shellcheck source=lib/common.sh
+source "$ROOT/lib/common.sh"
+# shellcheck source=lib/state.sh
+source "$ROOT/lib/state.sh"
+# shellcheck source=lib/lock.sh
+source "$ROOT/lib/lock.sh"
+# shellcheck source=lib/claude_plugin.sh
+source "$ROOT/lib/claude_plugin.sh"
+# shellcheck source=lib/nori.sh
+source "$ROOT/lib/nori.sh"
+
+CM_MAIN_BASHPID=${BASHPID:-$$}
+CM_TX_ACTIVE=0
+CM_TX_COMMITTED=0
+CM_TX_PLUGIN_CREATED=0
+CM_TX_PLUGIN_ID=''
+CM_TX_PREV_PLUGIN_ENABLED=false
+CM_TX_PREV_MARKER=''
+CM_TX_SNAPSHOT=''
+CM_TX_ROLLBACK_NORI=0
+
+usage() {
+  cat <<'USAGE'
+Usage:
+  claude-mode [global options] install
+  claude-mode [global options] use senior|superpowers
+  claude-mode [global options] status [--json]
+  claude-mode [global options] doctor [--json]
+  claude-mode [global options] uninstall [--purge-global]
+  claude-mode help
+
+Global options:
+  --project PATH       Explicit project root
+  --allow-non-git      Permit a directory that is not a Git repository
+  --dry-run            Print mutations without applying them
+  --verbose            Show diagnostic commands
+  --yes                Confirm destructive actions
+  --json               Machine-readable output for status/doctor
+  --purge-global       With uninstall, remove Nori if this tool installed it
+  -h, --help           Show this help
+  -V, --version        Show version
+USAGE
+}
+
+cm_exit_handler() {
+  local status=$?
+  if [[ ${BASHPID:-$$} != "$CM_MAIN_BASHPID" ]]; then
+    trap - EXIT INT TERM
+    exit "$status"
+  fi
+  trap - EXIT INT TERM
+  if [[ "$status" -ne 0 && "$CM_TX_ACTIVE" == 1 && "$CM_TX_COMMITTED" == 0 && "$CM_DRY_RUN" != 1 ]]; then
+    set +e
+    cm_warn 'operation failed; attempting rollback'
+    if [[ -n "$CM_TX_SNAPSHOT" && -f "$CM_TX_SNAPSHOT" ]]; then
+      cm_copy_json_snapshot "$CM_TX_SNAPSHOT" "$CM_CLAUDE_SETTINGS" >/dev/null 2>&1 || true
+    fi
+    if command -v nori-skillsets >/dev/null 2>&1; then
+      if [[ -n "$CM_TX_PREV_MARKER" ]]; then
+        case "$CM_TX_PREV_MARKER" in
+          */senior-swe|senior-swe) cm_nori_switch senior-swe >/dev/null 2>&1 || true ;;
+          */claude-mode-neutral|claude-mode-neutral) cm_nori_switch "$CM_NEUTRAL_NAME" >/dev/null 2>&1 || true ;;
+        esac
+      elif [[ "$CM_TX_ROLLBACK_NORI" == 1 ]]; then
+        cm_nori_clear_project >/dev/null 2>&1 || true
+      fi
+    fi
+    local rollback_plugin_id=${CM_TX_PLUGIN_ID:-${CM_PLUGIN_ID:-}}
+    if command -v claude >/dev/null 2>&1 && [[ -n "$rollback_plugin_id" ]]; then
+      if [[ "$CM_TX_PLUGIN_CREATED" == 1 || "${CM_PLUGIN_INSTALLED_BY_TOOL:-false}" == true ]]; then
+        claude plugin uninstall "$rollback_plugin_id" --scope local --prune --yes >/dev/null 2>&1 || true
+      elif [[ "$CM_TX_PREV_PLUGIN_ENABLED" == true ]]; then
+        claude plugin enable "$rollback_plugin_id" --scope local >/dev/null 2>&1 || true
+      else
+        claude plugin disable "$rollback_plugin_id" --scope local >/dev/null 2>&1 || true
+      fi
+    fi
+    cm_warn 'rollback completed on a best-effort basis; run doctor before retrying'
+  fi
+  cm_release_lock
+  exit "$status"
+}
+trap cm_exit_handler EXIT
+trap 'exit 130' INT TERM
+
+cm_begin_transaction() {
+  CM_TX_ACTIVE=1
+  CM_TX_COMMITTED=0
+  CM_TX_PREV_MARKER=$(cm_nori_marker)
+  if [[ "$CM_DRY_RUN" == 1 ]]; then
+    CM_TX_SNAPSHOT=''
+  else
+    cm_acquire_lock
+    CM_TX_SNAPSHOT="$CM_STATE_DIR/transaction-settings.json"
+    mkdir -p "$CM_STATE_DIR"
+    cm_copy_json_snapshot "$CM_CLAUDE_SETTINGS" "$CM_TX_SNAPSHOT"
+  fi
+  if command -v claude >/dev/null 2>&1; then
+    local plugin
+    plugin=$(cm_plugin_single_json)
+    if [[ "$plugin" != null ]]; then
+      CM_TX_PLUGIN_ID=$(cm_plugin_field "$plugin" id)
+      CM_TX_PREV_PLUGIN_ENABLED=$(cm_plugin_field "$plugin" enabled false)
+    fi
+  fi
+}
+
+cm_commit_transaction() {
+  CM_TX_COMMITTED=1
+  CM_TX_ACTIVE=0
+  if [[ -n "$CM_TX_SNAPSHOT" ]]; then rm -f "$CM_TX_SNAPSHOT"; fi
+  cm_release_lock
+}
+
+cm_state_bool() {
+  local path=$1 default=${2:-false}
+  if cm_state_exists; then cm_state_get "$path" "$default" 2>/dev/null || printf '%s' "$default"; else printf '%s' "$default"; fi
+}
+
+cm_state_text() {
+  local path=$1 default=${2:-null}
+  if cm_state_exists; then cm_state_get "$path" "$(cm_json_string "$default")" 2>/dev/null || printf '%s' "$default"; else printf '%s' "$default"; fi
+}
+
+cm_status_json() {
+  local state_installed=false expected=null marker='' nori_available=false
+  local matches='[]' count=0 plugin='{"installed":false,"id":null,"enabled":false,"scope":null,"scopes":[],"version":null}'
+  local plugin_enabled=false plugin_installed=false
+  local mode=none
+  local -a issues=()
+
+  if cm_state_exists; then
+    state_installed=$(cm_state_get installed false 2>/dev/null || printf false)
+    expected=$(cm_state_get expected_mode 'null' 2>/dev/null || printf null)
+  fi
+  if command -v nori-skillsets >/dev/null 2>&1; then nori_available=true; fi
+  marker=$(cm_nori_marker)
+
+  if command -v claude >/dev/null 2>&1; then
+    matches=$(cm_plugin_matches_json)
+    count=$(printf '%s' "$matches" | python3 -S -c 'import json,sys; print(len(json.load(sys.stdin)))')
+  fi
+  if ((count > 1)); then
+    issues+=("multiple Superpowers installations detected")
+    plugin_installed=true
+    plugin_enabled=$(printf '%s' "$matches" | python3 -S -c 'import json,sys; print("true" if any(x.get("enabled") for x in json.load(sys.stdin)) else "false")')
+    plugin=$(printf '%s' "$matches" | python3 -S -c 'import json,sys; xs=json.load(sys.stdin); print(json.dumps({"installed":True,"id":None,"enabled":any(x.get("enabled") for x in xs),"scope":None,"scopes":[],"version":None,"matches":xs},sort_keys=True))')
+  elif ((count == 1)); then
+    plugin_installed=true
+    plugin=$(printf '%s' "$matches" | python3 -S -c 'import json,sys; x=json.load(sys.stdin)[0]; print(json.dumps({"installed":True,"id":x.get("id"),"enabled":bool(x.get("enabled")),"scope":x.get("scope") or None,"scopes":x.get("scopes",[]),"version":x.get("version") or None},sort_keys=True))')
+    plugin_enabled=$(JSON_OBJECT="$plugin" python3 -S -c 'import json,os; print("true" if json.loads(os.environ["JSON_OBJECT"])["enabled"] else "false")')
+    local local_scope
+    local_scope=$(JSON_OBJECT="$plugin" python3 -S -c 'import json,os; x=json.loads(os.environ["JSON_OBJECT"]); s=x.get("scopes",[]) or ([x.get("scope")] if x.get("scope") else []); print("true" if s==["local"] else "false")')
+    [[ "$local_scope" == true ]] || issues+=("Superpowers is not installed at local scope")
+  fi
+
+  local senior=false neutral=false
+  case "$marker" in
+    */senior-swe|senior-swe) senior=true ;;
+    */claude-mode-neutral|claude-mode-neutral) neutral=true ;;
+    '') ;;
+    *) issues+=("unknown Nori skillset is active: $marker") ;;
+  esac
+
+  if [[ "$senior" == true && "$plugin_enabled" == true ]]; then
+    issues+=("senior-swe and Superpowers are simultaneously active")
+  fi
+
+  if [[ "$state_installed" != true && -z "$marker" ]]; then
+    mode=none
+  elif [[ "$senior" == true && "$plugin_installed" == true && "$plugin_enabled" == false ]]; then
+    mode=senior
+  elif [[ "$neutral" == true && "$plugin_installed" == true && "$plugin_enabled" == true ]]; then
+    mode=superpowers
+  elif [[ -z "$marker" && "$plugin_enabled" == false ]]; then
+    mode=none
+  else
+    mode=invalid
+    issues+=("observed configuration does not match a supported mode")
+  fi
+
+  if [[ "$state_installed" == true && "$expected" != null && "$expected" != "$mode" ]]; then
+    issues+=("recorded mode $expected differs from observed mode $mode")
+  fi
+
+  local issues_json
+  issues_json=$(printf '%s\n' "${issues[@]-}" | python3 -S -c 'import json,sys; print(json.dumps([x.rstrip("\n") for x in sys.stdin if x.rstrip("\n")]))')
+  python3 -S "$CM_JSON_TOOL" emit-status \
+    --project "$CM_PROJECT" \
+    --installed "$state_installed" \
+    --mode "$mode" \
+    --expected "$expected" \
+    --nori-available "$nori_available" \
+    --marker "${marker:-null}" \
+    --plugin "$plugin" \
+    --issues "$issues_json"
+}
+
+cm_print_status_human() {
+  local json=$1
+  STATUS_JSON="$json" python3 -S - <<'PY'
+import json,os
+s=json.loads(os.environ['STATUS_JSON'])
+print(f"Project: {s['project']}")
+print(f"Installed by claude-mode: {'yes' if s['installed'] else 'no'}")
+print(f"Observed mode: {s['mode']}")
+print(f"Expected mode: {s['expected_mode'] or '-'}")
+print(f"Nori skillset: {s['nori']['active_skillset'] or '-'}")
+p=s['plugin']
+print(f"Superpowers: {'installed' if p['installed'] else 'not installed'}; {'enabled' if p['enabled'] else 'disabled'}")
+if p.get('id'): print(f"Plugin ID: {p['id']}")
+if s['issues']:
+    print('Issues:')
+    for issue in s['issues']: print(f"  - {issue}")
+else:
+    print('Issues: none')
+if s['restart_required']:
+    print('Start a new Claude Code session after changing modes.')
+PY
+}
+
+cm_validate_mode() {
+  local expected=$1 json mode
+  json=$(cm_status_json)
+  mode=$(STATUS_JSON="$json" python3 -S -c 'import json,os; print(json.loads(os.environ["STATUS_JSON"])["mode"])')
+  [[ "$mode" == "$expected" ]] || cm_die "mode verification failed: expected $expected, observed $mode"
+}
+
+cm_install() {
+  cm_require_cmd python3
+  cm_require_cmd claude
+  cm_begin_transaction
+
+  local existing_state=false continuing_install=false baseline_existed=false
+  if cm_state_exists; then
+    existing_state=true
+    [[ "$(cm_state_bool installed false)" == true ]] && continuing_install=true
+  fi
+  if [[ "$CM_DRY_RUN" == 1 ]]; then
+    cm_nori_ensure_installed
+    cm_info "DRY-RUN: initialize Nori for $CM_PROJECT"
+    cm_info 'DRY-RUN: ensure senior-swe and claude-mode-neutral skillsets'
+    cm_plugin_install_if_needed
+    cm_plugin_disable "${CM_PLUGIN_ID:-$CM_PLUGIN_DEFAULT}"
+    cm_info 'DRY-RUN: switch Nori to senior-swe'
+    cm_commit_transaction
+    return 0
+  fi
+
+  cm_state_create
+  if [[ ! -f "$CM_BASE_SETTINGS" || "$continuing_install" != true ]]; then
+    [[ -f "$CM_CLAUDE_SETTINGS" ]] && baseline_existed=true
+    cm_copy_json_snapshot "$CM_CLAUDE_SETTINGS" "$CM_BASE_SETTINGS"
+  else
+    baseline_existed=$(cm_state_bool settings.baseline_existed false)
+  fi
+
+  cm_nori_ensure_installed
+  CM_TX_ROLLBACK_NORI=1
+  cm_nori_init
+  cm_nori_ensure_senior
+  cm_nori_ensure_neutral
+  cm_plugin_install_if_needed
+  [[ "$CM_PLUGIN_INSTALLED_BY_TOOL" == true ]] && CM_TX_PLUGIN_CREATED=1
+  CM_TX_PLUGIN_ID=$CM_PLUGIN_ID
+  cm_plugin_disable "$CM_PLUGIN_ID"
+  cm_nori_switch senior-swe
+  cm_copy_json_snapshot "$CM_CLAUDE_SETTINGS" "$CM_POST_SETTINGS"
+
+  local plugin_owned=$CM_PLUGIN_INSTALLED_BY_TOOL neutral_owned=$CM_NEUTRAL_CREATED nori_owned=$CM_NORI_INSTALLED_BY_TOOL senior_pre=$CM_SENIOR_PREEXISTING plugin_pre=$CM_PLUGIN_PREEXISTING_ENABLED installed_at
+  if [[ "$continuing_install" == true ]]; then
+    [[ "$(cm_state_bool plugin.installed_by_tool false)" == true ]] && plugin_owned=true
+    [[ "$(cm_state_bool nori.neutral_created false)" == true ]] && neutral_owned=true
+    [[ "$(cm_state_bool nori.installed_by_tool false)" == true ]] && nori_owned=true
+    [[ "$(cm_state_bool nori.senior_preexisting false)" == true ]] && senior_pre=true
+    [[ "$(cm_state_bool plugin.preexisting_enabled false)" == true ]] && plugin_pre=true
+    installed_at=$(cm_state_get installed_at "$(cm_json_string "$(cm_now)")")
+  else
+    installed_at=$(cm_now)
+  fi
+
+  cm_state_set \
+    "installed=true" \
+    "expected_mode=\"senior\"" \
+    "installed_at=$(cm_json_string "$installed_at")" \
+    "updated_at=$(cm_json_string "$(cm_now)")" \
+    "plugin.id=$(cm_json_string "$CM_PLUGIN_ID")" \
+    "plugin.scope=\"local\"" \
+    "plugin.installed_by_tool=$plugin_owned" \
+    "plugin.preexisting_enabled=$plugin_pre" \
+    "plugin.version=$(cm_json_string "$(cm_version_of claude)")" \
+    "nori.installed_by_tool=$nori_owned" \
+    "nori.senior_preexisting=$senior_pre" \
+    "nori.neutral_created=$neutral_owned" \
+    "nori.neutral_name=$(cm_json_string "$CM_NEUTRAL_NAME")" \
+    "nori.neutral_path=$(cm_json_string "$CM_NEUTRAL_DIR")" \
+    "nori.version=$(cm_json_string "$(cm_version_of nori-skillsets)")" \
+    "settings.baseline=$(cm_json_string "$CM_BASE_SETTINGS")" \
+    "settings.post_install=$(cm_json_string "$CM_POST_SETTINGS")" \
+    "settings.baseline_existed=$baseline_existed"
+
+  cm_validate_mode senior
+  cm_commit_transaction
+  cm_info 'installed successfully; active mode: senior'
+  cm_info 'Start a new Claude Code session before working.'
+}
+
+cm_use() {
+  local target=$1
+  [[ "$target" == senior || "$target" == superpowers ]] || cm_die 'use requires senior or superpowers'
+  cm_state_exists || cm_die 'claude-mode is not installed for this project'
+  [[ "$(cm_state_bool installed false)" == true ]] || cm_die 'claude-mode is not currently installed for this project'
+  cm_require_cmd claude
+  cm_require_cmd nori-skillsets
+  cm_begin_transaction
+  local plugin_id
+  plugin_id=$(cm_state_get plugin.id "$(cm_json_string "$CM_PLUGIN_DEFAULT")")
+  CM_TX_PLUGIN_ID=$plugin_id
+
+  if [[ "$CM_DRY_RUN" == 1 ]]; then
+    if [[ "$target" == senior ]]; then
+      cm_plugin_disable "$plugin_id"
+      cm_info 'DRY-RUN: switch Nori to senior-swe'
+    else
+      cm_info "DRY-RUN: switch Nori to $CM_NEUTRAL_NAME"
+      cm_plugin_enable "$plugin_id"
+    fi
+    cm_commit_transaction
+    return 0
+  fi
+
+  if [[ "$target" == senior ]]; then
+    cm_plugin_disable "$plugin_id"
+    cm_nori_switch senior-swe
+  else
+    cm_nori_switch "$CM_NEUTRAL_NAME"
+    cm_plugin_enable "$plugin_id"
+  fi
+  cm_state_set "expected_mode=$(cm_json_string "$target")" "updated_at=$(cm_json_string "$(cm_now)")"
+  cm_validate_mode "$target"
+  cm_commit_transaction
+  cm_info "active mode: $target"
+  cm_info 'Start a new Claude Code session to avoid retaining instructions from the previous mode.'
+}
+
+cm_status() {
+  local json
+  json=$(cm_status_json)
+  if [[ "$CM_OUTPUT_JSON" == 1 ]]; then printf '%s\n' "$json"; else cm_print_status_human "$json"; fi
+}
+
+cm_doctor() {
+  local json issues_count=0
+  json=$(cm_status_json)
+  local -a extra=()
+  command -v python3 >/dev/null 2>&1 || extra+=("python3 is missing")
+  command -v claude >/dev/null 2>&1 || extra+=("Claude Code CLI is missing")
+  command -v nori-skillsets >/dev/null 2>&1 || extra+=("Nori Skillsets CLI is missing")
+  if [[ -d "$CM_NEUTRAL_DIR" ]] && ! python3 -S "$CM_JSON_TOOL" validate-neutral "$CM_NEUTRAL_DIR" --name "$CM_NEUTRAL_NAME"; then
+    extra+=("neutral Nori skillset is modified or invalid")
+  fi
+  if ((${#extra[@]})); then
+    json=$(STATUS_JSON="$json" EXTRA="$(printf '%s\n' "${extra[@]}")" python3 -S - <<'PY'
+import json,os
+s=json.loads(os.environ['STATUS_JSON'])
+s['issues'].extend([x for x in os.environ['EXTRA'].splitlines() if x])
+print(json.dumps(s,indent=2,sort_keys=True))
+PY
+)
+  fi
+  issues_count=$(STATUS_JSON="$json" python3 -S -c 'import json,os; print(len(json.loads(os.environ["STATUS_JSON"])["issues"]))')
+  if [[ "$CM_OUTPUT_JSON" == 1 ]]; then printf '%s\n' "$json"; else cm_print_status_human "$json"; fi
+  [[ "$issues_count" -eq 0 ]]
+}
+
+cm_other_installed_states() {
+  local state_root=${XDG_STATE_HOME:-$HOME/.local/state}/claude-mode
+  [[ -d "$state_root" ]] || return 1
+  python3 -S - "$state_root" "$CM_STATE_FILE" <<'PY'
+import json,os,sys
+root,current=sys.argv[1:]
+for base,_,files in os.walk(root):
+    if 'state.json' not in files: continue
+    path=os.path.join(base,'state.json')
+    if os.path.realpath(path)==os.path.realpath(current): continue
+    try:
+        if json.load(open(path)).get('installed'):
+            print(path); raise SystemExit(0)
+    except Exception: pass
+raise SystemExit(1)
+PY
+}
+
+cm_uninstall() {
+  cm_state_exists || { cm_info 'nothing installed for this project'; return 0; }
+  cm_begin_transaction
+  local plugin_id plugin_owned plugin_pre neutral_owned nori_owned baseline_existed
+  plugin_id=$(cm_state_get plugin.id "$(cm_json_string "$CM_PLUGIN_DEFAULT")")
+  plugin_owned=$(cm_state_bool plugin.installed_by_tool false)
+  plugin_pre=$(cm_state_bool plugin.preexisting_enabled false)
+  neutral_owned=$(cm_state_bool nori.neutral_created false)
+  nori_owned=$(cm_state_bool nori.installed_by_tool false)
+  baseline_existed=$(cm_state_bool settings.baseline_existed false)
+  CM_TX_PLUGIN_ID=$plugin_id
+
+  cm_confirm "Uninstall claude-mode components from $CM_PROJECT?" || cm_die 'uninstall cancelled'
+  if [[ "$CM_DRY_RUN" == 1 ]]; then
+    cm_info "DRY-RUN: disable $plugin_id"
+    [[ "$plugin_owned" == true ]] && cm_info "DRY-RUN: uninstall $plugin_id from local scope"
+    cm_info 'DRY-RUN: clear Nori-managed project configuration'
+    [[ "$neutral_owned" == true ]] && cm_info "DRY-RUN: remove $CM_NEUTRAL_DIR"
+    [[ "$CM_PURGE_GLOBAL" == 1 ]] && cm_info 'DRY-RUN: consider uninstalling global nori-skillsets package'
+    cm_commit_transaction
+    return 0
+  fi
+
+  if command -v claude >/dev/null 2>&1; then
+    local plugin
+    plugin=$(cm_plugin_single_json)
+    if [[ "$plugin" != null ]]; then
+      cm_plugin_disable "$plugin_id" || true
+      if [[ "$plugin_owned" == true ]]; then
+        cm_plugin_uninstall "$plugin_id"
+      elif [[ "$plugin_pre" == true ]]; then
+        cm_plugin_enable "$plugin_id"
+      fi
+    fi
+  fi
+
+  cm_copy_json_snapshot "$CM_CLAUDE_SETTINGS" "$CM_CURRENT_SETTINGS"
+  if [[ -n "$(cm_nori_marker)" ]] && command -v nori-skillsets >/dev/null 2>&1; then
+    cm_nori_clear_project
+  fi
+  if [[ -f "$CM_BASE_SETTINGS" && -f "$CM_POST_SETTINGS" ]]; then
+    python3 -S "$CM_JSON_TOOL" settings-merge "$CM_BASE_SETTINGS" "$CM_POST_SETTINGS" "$CM_CURRENT_SETTINGS" "$CM_MERGED_SETTINGS" --conflicts "$CM_CONFLICTS_FILE"
+    cm_copy_json_snapshot "$CM_MERGED_SETTINGS" "$CM_CLAUDE_SETTINGS"
+    if [[ "$baseline_existed" == false ]] && python3 -S - "$CM_CLAUDE_SETTINGS" <<'PY'
+import json,sys
+raise SystemExit(0 if json.load(open(sys.argv[1]))=={} else 1)
+PY
+    then
+      rm -f "$CM_CLAUDE_SETTINGS"
+    fi
+    local conflicts
+    conflicts=$(python3 -S "$CM_JSON_TOOL" state-get "$CM_CONFLICTS_FILE" conflicts --default '[]' 2>/dev/null || printf '[]')
+    [[ "$conflicts" == '[]' ]] || cm_warn "settings merge preserved conflicting user values: $conflicts"
+  fi
+
+  [[ "$neutral_owned" == true ]] && cm_nori_remove_neutral_if_owned
+  cm_state_set "installed=false" "expected_mode=\"none\"" "updated_at=$(cm_json_string "$(cm_now)")" "uninstalled_at=$(cm_json_string "$(cm_now)")"
+
+  if [[ "$CM_PURGE_GLOBAL" == 1 ]]; then
+    [[ "$nori_owned" == true ]] || cm_die 'refusing global purge: this tool did not install Nori'
+    if other=$(cm_other_installed_states); then
+      cm_die "refusing global purge: another project is still installed ($other)"
+    fi
+    cm_require_cmd npm
+    cm_run npm uninstall -g nori-skillsets
+  fi
+
+  cm_validate_mode none
+  cm_commit_transaction
+  cm_info 'project components uninstalled; audit state and backups were preserved'
+}
+
+CM_PROJECT_ARG=''
+CM_ALLOW_NON_GIT=0
+CM_OUTPUT_JSON=0
+CM_PURGE_GLOBAL=0
+COMMAND=''
+POSITIONAL=()
+
+while (($#)); do
+  case "$1" in
+    --project) [[ $# -ge 2 ]] || cm_die '--project requires a path'; CM_PROJECT_ARG=$2; shift 2 ;;
+    --allow-non-git) CM_ALLOW_NON_GIT=1; shift ;;
+    --dry-run) CM_DRY_RUN=1; shift ;;
+    --verbose) CM_VERBOSE=1; shift ;;
+    --yes|-y) CM_ASSUME_YES=1; shift ;;
+    --json) CM_OUTPUT_JSON=1; shift ;;
+    --purge-global) CM_PURGE_GLOBAL=1; shift ;;
+    --version|-V) printf '%s\n' "$CM_VERSION"; exit 0 ;;
+    --help|-h) usage; exit 0 ;;
+    --) shift; while (($#)); do POSITIONAL+=("$1"); shift; done ;;
+    -*) cm_die "unknown option: $1" ;;
+    *) if [[ -z "$COMMAND" ]]; then COMMAND=$1; else POSITIONAL+=("$1"); fi; shift ;;
+  esac
+done
+
+[[ -n "$COMMAND" ]] || COMMAND=help
+case "$COMMAND" in
+  help) usage; exit 0 ;;
+  install|use|status|doctor|uninstall) ;;
+  *) cm_die "unknown command: $COMMAND" ;;
+esac
+
+cm_require_cmd python3
+CM_PROJECT=$(cm_resolve_project "$CM_PROJECT_ARG" "$CM_ALLOW_NON_GIT")
+cm_state_init_paths
+
+case "$COMMAND" in
+  install) [[ ${#POSITIONAL[@]} -eq 0 ]] || cm_die 'install takes no positional arguments'; cm_install ;;
+  use) [[ ${#POSITIONAL[@]} -eq 1 ]] || cm_die 'use requires exactly one mode'; cm_use "${POSITIONAL[0]}" ;;
+  status) [[ ${#POSITIONAL[@]} -eq 0 ]] || cm_die 'status takes no positional arguments'; cm_status ;;
+  doctor) [[ ${#POSITIONAL[@]} -eq 0 ]] || cm_die 'doctor takes no positional arguments'; cm_doctor ;;
+  uninstall) [[ ${#POSITIONAL[@]} -eq 0 ]] || cm_die 'uninstall takes no positional arguments'; cm_uninstall ;;
+esac
