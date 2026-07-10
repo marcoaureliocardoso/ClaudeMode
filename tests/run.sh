@@ -209,6 +209,21 @@ test_json_tool_errors_include_command_context() {
   assert_contains "$out" "state-get"
 }
 
+test_install_handles_already_disabled_plugin() {
+  setup_test_env
+  project="$TEST_TMP/project"
+  mkdir -p "$project"
+  cat >"$MOCK_CLAUDE_PLUGINS" <<'JSON'
+[{"id":"superpowers@claude-plugins-official","name":"superpowers","marketplace":"claude-plugins-official","scope":"local","enabled":false,"version":"6.1.1"}]
+JSON
+  run_cli --project "$project" --allow-non-git --yes install
+  assert_status 0
+  assert_eq false "$(plugin_enabled)"
+  assert_eq 1 "$(plugin_count)"
+  run_cli --project "$project" --allow-non-git status --json
+  assert_json "$LAST_OUTPUT" mode senior
+}
+
 if [[ "${1:-}" == "--worker" ]]; then
   case_name=${2:?missing test function}
   "$case_name"
@@ -227,6 +242,7 @@ CASE_LABELS=(
   failed_switch_rolls_back
   preexisting_plugin_restored
   json_tool_error_context
+  install_already_disabled
 )
 CASE_FUNCTIONS=(
   test_install_and_status
@@ -240,6 +256,7 @@ CASE_FUNCTIONS=(
   test_failed_switch_rolls_back_to_previous_mode
   test_preexisting_plugin_is_restored_on_uninstall
   test_json_tool_errors_include_command_context
+  test_install_handles_already_disabled_plugin
 )
 
 failures=0

@@ -79,8 +79,16 @@ cm_plugin_install_if_needed() {
   fi
 }
 
-cm_plugin_enable() { cm_run claude plugin enable "$1" --scope local; }
-cm_plugin_disable() { cm_run claude plugin disable "$1" --scope local; }
+cm_plugin_enable() {
+  if [[ "$(cm_plugin_enabled_actual)" != true ]]; then
+    cm_run claude plugin enable "$1" --scope local
+  fi
+}
+cm_plugin_disable() {
+  if [[ "$(cm_plugin_enabled_actual)" == true ]]; then
+    cm_run claude plugin disable "$1" --scope local
+  fi
+}
 cm_plugin_uninstall() { cm_run claude plugin uninstall "$1" --scope local --prune --yes; }
 
 cm_plugin_enabled_actual() {

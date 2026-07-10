@@ -45,18 +45,25 @@ if not any(x.get('id')==i for x in data):
 json.dump(data,open(p,'w'),indent=2)
 PY
     ;;
-  enable|disable)
-    id=$3; value=true; [[ "$sub" == disable ]] && value=false
+  enable | disable)
+    id=$3
+    value=true
+    [[ "$sub" == disable ]] && value=false
     python3 -S - "$MOCK_CLAUDE_PLUGINS" "$id" "$value" <<'PY'
 import json,sys
 p,i,v=sys.argv[1:]; v=v=='true'
 data=json.load(open(p))
-found=False
 for x in data:
     if x.get('id')==i:
-        x['enabled']=v; found=True
-if not found: raise SystemExit(3)
-json.dump(data,open(p,'w'),indent=2)
+        if x.get('enabled')==v:
+            action='enable' if v else 'disable'
+            print(f'Plugin "{i}" is already {action}d at local scope',file=sys.stderr)
+            raise SystemExit(1)
+        x['enabled']=v
+        json.dump(data,open(p,'w'),indent=2)
+        raise SystemExit(0)
+print(f'Plugin "{i}" not found',file=sys.stderr)
+raise SystemExit(3)
 PY
     ;;
   uninstall)
