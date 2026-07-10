@@ -62,11 +62,13 @@ cm_plugin_install_if_needed() {
   CM_PLUGIN_PREEXISTING_ENABLED=false
   if [[ "$existing" == null ]]; then
     cm_run claude plugin install "$CM_PLUGIN_DEFAULT" --scope local
+    # shellcheck disable=SC2034
     CM_PLUGIN_INSTALLED_BY_TOOL=true
     CM_PLUGIN_ID="$CM_PLUGIN_DEFAULT"
   else
     CM_PLUGIN_ID=$(cm_plugin_field "$existing" id)
     [[ "$(cm_plugin_has_local_scope "$existing")" == true ]] || cm_die "Superpowers is installed outside local scope ($CM_PLUGIN_ID); remove or migrate it first"
+    # shellcheck disable=SC2034
     CM_PLUGIN_PREEXISTING_ENABLED=$(cm_plugin_field "$existing" enabled false)
   fi
   if [[ "$CM_DRY_RUN" != 1 ]]; then
@@ -84,6 +86,9 @@ cm_plugin_uninstall() { cm_run claude plugin uninstall "$1" --scope local --prun
 cm_plugin_enabled_actual() {
   local object
   object=$(cm_plugin_single_json)
-  [[ "$object" == null ]] && { printf 'false'; return; }
+  [[ "$object" == null ]] && {
+    printf 'false'
+    return
+  }
   cm_plugin_field "$object" enabled false
 }

@@ -10,8 +10,8 @@ setup_test_env() {
   export MOCK_LOG="$TEST_TMP/mock.log"
   export MOCK_CLAUDE_PLUGINS="$TEST_TMP/plugins.json"
   mkdir -p "$HOME/.claude" "$MOCK_BIN" "$XDG_STATE_HOME"
-  printf '[]\n' > "$MOCK_CLAUDE_PLUGINS"
-  : > "$MOCK_LOG"
+  printf '[]\n' >"$MOCK_CLAUDE_PLUGINS"
+  : >"$MOCK_LOG"
   export PATH="$MOCK_BIN:$ORIGINAL_PATH"
   make_mock_claude
   make_mock_nori
@@ -23,7 +23,7 @@ teardown_test_env() {
 }
 
 make_mock_claude() {
-  cat > "$MOCK_BIN/claude" <<'MOCK'
+  cat >"$MOCK_BIN/claude" <<'MOCK'
 #!/usr/bin/env bash
 set -euo pipefail
 printf 'claude %q\n' "$*" >> "$MOCK_LOG"
@@ -75,7 +75,7 @@ MOCK
 }
 
 make_mock_nori() {
-  cat > "$MOCK_BIN/nori-skillsets" <<'MOCK'
+  cat >"$MOCK_BIN/nori-skillsets" <<'MOCK'
 #!/usr/bin/env bash
 set -euo pipefail
 printf 'nori %q\n' "$*" >> "$MOCK_LOG"
@@ -161,7 +161,7 @@ MOCK
 }
 
 make_mock_npm() {
-  cat > "$MOCK_BIN/npm" <<'MOCK'
+  cat >"$MOCK_BIN/npm" <<'MOCK'
 #!/usr/bin/env bash
 set -euo pipefail
 printf 'npm %q\n' "$*" >> "$MOCK_LOG"

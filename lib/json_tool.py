@@ -400,7 +400,7 @@ def main() -> int:
     try:
         return int(args.func(args))
     except (OSError, ValueError, json.JSONDecodeError) as exc:
-        print(f"json_tool: {exc}", file=sys.stderr)
+        print(f"json_tool {args.command}: {exc}", file=sys.stderr)
         return 2
 
 

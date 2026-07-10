@@ -2,3 +2,7 @@ __pycache__/
 *.pyc
 *.tar.gz
 *.zip
+.worktrees/
+shellcheck-*/
+shfmt_*
+*.tar.xz
