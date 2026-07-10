@@ -5,4 +5,5 @@ __pycache__/
 .worktrees/
 shellcheck-*/
 shfmt_*
+gh_*
 *.tar.xz
