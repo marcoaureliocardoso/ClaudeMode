@@ -4,7 +4,7 @@ Path: @/tests
 
 ### Overview
 
-A behavioral test suite for claude-mode that runs 15 integration-style tests against the real CLI binary, using mocked external dependencies. Tests are executed in parallel (3 workers at a time) against an isolated filesystem environment.
+A behavioral test suite for claude-mode that runs 16 integration-style tests against the real CLI binary, using mocked external dependencies. Tests are executed in parallel (3 workers at a time) against an isolated filesystem environment.
 
 ### How it fits into the larger codebase
 
@@ -30,6 +30,7 @@ This is the sole test suite for the project, invoked via `make test` or directly
 12. **patches_fix_all_known_bugs** -- install with `MOCK_NORI_BUGGY_VERSION=1`, verify all 11 patches applied
 13. **patches_are_idempotent** -- second install does not modify already-patched files
 14. **patches_respect_dry_run** -- `--dry-run` does not create or modify any files
+15. **patches_survive_install_uninstall_cycle** -- 2 full install/uninstall cycles; verifies patches apply correctly after each fresh install, including heading-based Bug 4 detection
 
 **Coverage**: Each test calls `run_cli` (a wrapper that captures exit code and stderr/stdout), then uses helpers from @/tests/helpers/testlib.sh to assert state on files, plugin registries, and Nori markers.
 

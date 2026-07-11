@@ -14,7 +14,8 @@
 - Patches run during `install` and `use senior`. Each patch has a pattern-detection guard for idempotency and version-awareness.
 - **Standalone script** `scripts/nori-patch.sh` applies patches independently of claude-mode.
 - Mock Nori extended with `MOCK_NORI_BUGGY_VERSION=1` support and `subagents/` directory copying.
-- Three new behavioral tests (patches application, idempotency, dry-run respect). Total: 15 tests.
+- Four new behavioral tests (patches application, idempotency, dry-run respect, install/uninstall cycle smoke test). Total: 16 tests.
+- Improved mock fidelity for paid-nori-knowledge-researcher (realistic headings with `## Phase 1:`, Phase 2 cross-references).
 - 11 GitHub issues filed upstream: [#541–#551](https://github.com/tilework-tech/nori-skillsets/issues?q=is%3Aissue+author%3Amarcoaureliocardoso).
 
 ## 0.1.1 — 2026-07-10

@@ -248,7 +248,7 @@ make verify
 
 Tests use fake executables in a temporary `PATH` and do not touch real Claude Code, Nori, or npm installations.
 
-Current behavioral coverage (15 tests):
+Current behavioral coverage (16 tests):
 
 - initial install;
 - idempotency;
@@ -264,7 +264,8 @@ Current behavioral coverage (15 tests):
 - json_tool error context;
 - smart patch application for all 11 upstream bugs;
 - patch idempotency (re-running install does not corrupt);
-- dry-run respects `--dry-run` flag for patches.
+- dry-run respects `--dry-run` flag for patches;
+- patches survive install/uninstall cycles (2-cycle smoke test).
 
 ### Code Quality
 

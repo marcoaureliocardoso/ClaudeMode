@@ -313,6 +313,38 @@ test_patches_are_idempotent() {
   assert_eq "$checksum1" "$checksum2" "second install should not modify already-patched files"
 }
 
+test_patches_survive_install_uninstall_cycle() {
+  # Smoke test: 2 install/uninstall cycles verify patches apply correctly after each fresh install
+  setup_test_env
+  export MOCK_NORI_BUGGY_VERSION=1
+  project="$TEST_TMP/project"
+  mkdir -p "$project"
+
+  local cycle
+  for cycle in 1 2; do
+    run_cli --project "$project" --allow-non-git --yes install
+    assert_status 0 "cycle $cycle install should succeed"
+
+    # Verify key patches applied (subset of full check for speed)
+    assert_contains "$(cat "$project/.claude/CLAUDE.md")" "just on your terms"
+    ! grep -q 'nori-sync-docs' "$project/.claude/agents/nori-initial-documenter.md" 2>/dev/null ||
+      fail "cycle $cycle: nori-sync-docs not removed"
+    ! grep -q 'recall/SKILL.md' "$project/.claude/agents/paid-nori-knowledge-researcher.md" 2>/dev/null ||
+      fail "cycle $cycle: recall ref not removed"
+    grep -q '^name: paid-nori-knowledge-researcher' "$project/.claude/agents/paid-nori-knowledge-researcher.md" 2>/dev/null ||
+      fail "cycle $cycle: YAML name not fixed"
+    ! grep -q 'Chnages' "$project/.claude/agents/nori-change-documenter.md" 2>/dev/null ||
+      fail "cycle $cycle: typo not fixed"
+    # Verify Bug 4: Phase 1 step 8 renumbered (heading-based detection)
+    ! grep -qP '^8\.\s' "$project/.claude/agents/paid-nori-knowledge-researcher.md" 2>/dev/null ||
+      fail "cycle $cycle: Bug 4 step 8 still present"
+
+    run_cli --project "$project" --allow-non-git --yes uninstall
+    assert_status 0 "cycle $cycle uninstall should succeed"
+    assert_file_not_exists "$project/.claude/.nori-managed"
+  done
+}
+
 test_patches_respect_dry_run() {
   setup_test_env
   export MOCK_NORI_BUGGY_VERSION=1
@@ -348,6 +380,7 @@ CASE_LABELS=(
   patches_fix_all_known_bugs
   patches_are_idempotent
   patches_respect_dry_run
+  patches_survive_install_uninstall_cycle
 )
 CASE_FUNCTIONS=(
   test_install_and_status
@@ -365,6 +398,7 @@ CASE_FUNCTIONS=(
   test_patches_fix_all_known_bugs
   test_patches_are_idempotent
   test_patches_respect_dry_run
+  test_patches_survive_install_uninstall_cycle
 )
 
 failures=0

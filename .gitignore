@@ -7,3 +7,4 @@ shellcheck-*/
 shfmt_*
 gh_*
 *.tar.xz
+.claude/
