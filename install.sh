@@ -33,6 +33,13 @@ if [[ "${1:-}" == "--uninstall" ]]; then
   rm -f "$WRAPPER"
   rm -rf -- "$LIB_DIR"
   printf 'Removed %s and %s\n' "$WRAPPER" "$LIB_DIR"
+
+  # Remove the claude-mode managed block from user-level CLAUDE.md (if present)
+  CLAUDE_MD="$HOME/.claude/CLAUDE.md"
+  if [[ -f "$CLAUDE_MD" ]] && grep -q '# BEGIN CLAUDE-MODE MANAGED BLOCK' "$CLAUDE_MD"; then
+    sed -i '/^# BEGIN CLAUDE-MODE MANAGED BLOCK/,/^# END CLAUDE-MODE MANAGED BLOCK/d' "$CLAUDE_MD"
+    printf 'Removed claude-mode block from %s\n' "$CLAUDE_MD"
+  fi
   exit 0
 fi
 
@@ -50,3 +57,19 @@ chmod 700 "$WRAPPER"
 
 printf 'Installed claude-mode at %s\n' "$WRAPPER"
 printf 'Add %s to PATH when necessary.\n' "$BIN_DIR"
+
+# Inject claude-mode managed block into user-level CLAUDE.md (outside Nori's zone)
+CLAUDE_MD="$HOME/.claude/CLAUDE.md"
+if [[ -f "$CLAUDE_MD" ]] && ! grep -q '# BEGIN CLAUDE-MODE MANAGED BLOCK' "$CLAUDE_MD"; then
+  cat >>"$CLAUDE_MD" <<'EOF'
+
+# BEGIN CLAUDE-MODE MANAGED BLOCK
+<required>
+Ao iniciar em qualquer diretório de projeto, execute `claude-mode status`.
+Se retornar `mode: none` ou `installed: false`, ofereça instalação com `claude-mode --project $(pwd) --yes install`.
+O modo padrão ao instalar é `senior`.
+</required>
+# END CLAUDE-MODE MANAGED BLOCK
+EOF
+  printf 'Added claude-mode block to %s\n' "$CLAUDE_MD"
+fi
