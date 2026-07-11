@@ -1,5 +1,22 @@
 # Changelog
 
+## 0.2.0 — 2026-07-11
+
+- **Smart patches**: `lib/patch.sh` applies 11 idempotent fixes for upstream bugs in `senior-swe@1.0.2`.
+  - Truncated sentence in Copilot Mode section of CLAUDE.md
+  - Duplicate step 3 in nori-code-reviewer checklist
+  - Skipped step 4 in creating-debug-tests-and-iterating checklist
+  - Skipped step 7 in paid-nori-knowledge-researcher Phase 1 checklist
+  - Broken references to nonexistent skills (recall, memorize, nori-sync-docs, test-scenario-hygiene, nori-task-runner)
+  - YAML name mismatch in paid-nori-knowledge-researcher
+  - Typo "Chnages" in nori-change-documenter
+  - Incorrect agent reference in CLAUDE.md
+- Patches run during `install` and `use senior`. Each patch has a pattern-detection guard for idempotency and version-awareness.
+- **Standalone script** `scripts/nori-patch.sh` applies patches independently of claude-mode.
+- Mock Nori extended with `MOCK_NORI_BUGGY_VERSION=1` support and `subagents/` directory copying.
+- Three new behavioral tests (patches application, idempotency, dry-run respect). Total: 15 tests.
+- 11 GitHub issues filed upstream: [#541–#551](https://github.com/tilework-tech/nori-skillsets/issues?q=is%3Aissue+author%3Amarcoaureliocardoso).
+
 ## 0.1.1 — 2026-07-10
 
 - ShellCheck linting applied to all scripts (zero warnings).

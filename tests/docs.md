@@ -4,7 +4,7 @@ Path: @/tests
 
 ### Overview
 
-A behavioral test suite for claude-mode that runs 11 integration-style tests against the real CLI binary, using mocked external dependencies. Tests are executed in parallel (3 workers at a time) against an isolated filesystem environment.
+A behavioral test suite for claude-mode that runs 15 integration-style tests against the real CLI binary, using mocked external dependencies. Tests are executed in parallel (3 workers at a time) against an isolated filesystem environment.
 
 ### How it fits into the larger codebase
 
@@ -27,6 +27,9 @@ This is the sole test suite for the project, invoked via `make test` or directly
 9. **failed_switch_rolls_back** -- `MOCK_FAIL_NORI_SWITCH` triggers nori failure; verifies plugin state and marker revert
 10. **preexisting_plugin_restored** -- pre-existing enabled plugin is disabled on install, re-enabled on uninstall
 11. **json_tool_error_context** -- verifies `json_tool.py` errors include the command name
+12. **patches_fix_all_known_bugs** -- install with `MOCK_NORI_BUGGY_VERSION=1`, verify all 11 patches applied
+13. **patches_are_idempotent** -- second install does not modify already-patched files
+14. **patches_respect_dry_run** -- `--dry-run` does not create or modify any files
 
 **Coverage**: Each test calls `run_cli` (a wrapper that captures exit code and stderr/stdout), then uses helpers from @/tests/helpers/testlib.sh to assert state on files, plugin registries, and Nori markers.
 

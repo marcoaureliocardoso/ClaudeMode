@@ -8,7 +8,7 @@ Library modules that implement all of claude-mode's core operations: JSON proces
 
 ### How it fits into the larger codebase
 
-The lib directory is the engine room. @/bin/claude-mode sources all five files in dependency order: `common.sh` first (utility functions), then `state.sh` (paths/state I/O), `lock.sh` (mutex), `claude_plugin.sh` (plugin API), and `nori.sh` (skillset API). All shell functions are prefixed with `cm_`. Global variables use the `CM_` prefix. The Python module `json_tool.py` is invoked as a subprocess for all JSON manipulation.
+The lib directory is the engine room. @/bin/claude-mode sources all six files in dependency order: `common.sh` first (utility functions), then `state.sh` (paths/state I/O), `lock.sh` (mutex), `claude_plugin.sh` (plugin API), `nori.sh` (skillset API), and `patch.sh` (upstream bug fixes). All shell functions are prefixed with `cm_`. Global variables use the `CM_` prefix. The Python module `json_tool.py` is invoked as a subprocess for all JSON manipulation.
 
 ### Core Implementation
 
@@ -21,6 +21,8 @@ The lib directory is the engine room. @/bin/claude-mode sources all five files i
 **claude_plugin.sh** -- All interactions with `claude plugin` subcommands. `cm_plugin_matches_json` pipes the full plugin list through `json_tool.py plugin-matches` which normalizes and filters for "superpowers" plugins. `cm_plugin_install_if_needed` handles the install-or-verify-existing logic, tracking whether the tool installed the plugin or it pre-existed. Functions wrap `claude plugin enable/disable/uninstall` with `--scope local`.
 
 **nori.sh** -- All interactions with `nori-skillsets`. Manages the neutral skillset (`claude-mode-neutral`) lifecycle: creation, validation, removal. Installs nori-skillsets via npm if missing. Downloads senior-swe if not already present. Switches skillsets via `nori-skillsets switch`. Reads the `.nori-managed` marker file for current state. The neutral skillset is an empty compatibility skillset stored at `$HOME/.nori/profiles/personal/claude-mode-neutral/`.
+
+**patch.sh** -- Smart patches for known upstream bugs in the `senior-swe@1.0.2` skillset. Exports `cm_nori_apply_patches()` which calls 11 individual patch functions. Each patch has a pattern-detection guard: it checks whether the buggy pattern still exists in the target file before applying the fix. This ensures idempotency (safe to re-run) and version-awareness (patches silently skip when upstream releases a fix). Called from `cm_install()` and `cm_use senior` in @/bin/claude-mode. Also sourced by the standalone `scripts/nori-patch.sh`.
 
 **json_tool.py** -- A pure-standard-library Python CLI providing subcommands for JSON manipulation. Key operations:
 - `plugin-matches` -- reads Claude plugin JSON from stdin, normalizes objects, filters for Superpowers-related plugins

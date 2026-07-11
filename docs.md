@@ -4,14 +4,14 @@ Path: @/
 
 ### Overview
 
-claude-mode is a Bash CLI tool (v0.1.1) that manages concurrent installation of the Nori senior-swe skillset and the Claude Code Superpowers plugin on a per-project basis. It ensures only one mode is active at a time, provides rollback on failure, and preserves user settings changes through install/uninstall cycles.
+claude-mode is a Bash CLI tool (v0.2.0) that manages concurrent installation of the Nori senior-swe skillset and the Claude Code Superpowers plugin on a per-project basis. It ensures only one mode is active at a time, provides rollback on failure, and preserves user settings changes through install/uninstall cycles. It also applies smart patches for known upstream bugs in the senior-swe skillset.
 
 ### How it fits into the larger codebase
 
 This is the repository root. The project has six top-level directories:
 
 - **@/bin** -- Single CLI entry point `claude-mode`, argument parsing, command dispatch, transaction lifecycle
-- **@/lib** -- Five shell library modules and one Python module implementing all core operations
+- **@/lib** -- Six shell library modules and one Python module implementing all core operations
 - **@/tests** -- Behavioral test suite with mock external dependencies
 - **@/scripts** -- Verification quality gate (lint, syntax check, test run)
 - **@/docs** -- Pre-development design specifications and plans
@@ -37,8 +37,9 @@ System invariants:
 6. Create empty `claude-mode-neutral` profile if not present
 7. Install `superpowers@claude-plugins-official` plugin at local scope if missing
 8. Disable the plugin, switch Nori to senior-swe
-9. Snapshot settings as "post-install" state
-10. Write all ownership flags to state.json
+9. Apply smart patches for known upstream bugs in the senior-swe skillset
+10. Snapshot settings as "post-install" state
+11. Write all ownership flags to state.json
 
 **Use flow** (`cm_use`): Toggles between two modes:
 - "senior": Nori senior-swe active, Superpowers plugin disabled
@@ -64,3 +65,4 @@ System invariants:
 - Per-project state is stored at `$XDG_STATE_HOME/claude-mode/<sha256-hash>/` with backup snapshots stored in a `backups/` subdirectory
 - ShellCheck 0 warnings, shfmt formatting applied as of v0.1.1; both linting tools are vendored in the repository
 - The `--dry-run` flag shows all mutations without applying them, while still running the transaction lifecycle to validate the operation would succeed
+- **Smart patches**: `lib/patch.sh` applies fixes for 11 known upstream bugs in `senior-swe@1.0.2` (truncated CLAUDE.md, broken references to nonexistent skills, checklist numbering errors, YAML name mismatch, typo). Each patch has an idempotency guard — it checks whether the buggy pattern still exists before applying, so patches silently skip when upstream releases a fix. Patches run during `install` and `use senior`. A standalone script `scripts/nori-patch.sh` is available for users who don't use claude-mode.

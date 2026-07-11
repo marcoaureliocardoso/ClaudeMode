@@ -14,6 +14,8 @@ source "$ROOT/lib/lock.sh"
 source "$ROOT/lib/claude_plugin.sh"
 # shellcheck source=lib/nori.sh
 source "$ROOT/lib/nori.sh"
+# shellcheck source=lib/patch.sh
+source "$ROOT/lib/patch.sh"
 
 CM_MAIN_BASHPID=${BASHPID:-$$}
 CM_TX_ACTIVE=0
@@ -270,6 +272,7 @@ cm_install() {
   CM_TX_PLUGIN_ID=$CM_PLUGIN_ID
   cm_plugin_disable "$CM_PLUGIN_ID"
   cm_nori_switch senior-swe
+  cm_nori_apply_patches
   cm_copy_json_snapshot "$CM_CLAUDE_SETTINGS" "$CM_POST_SETTINGS"
 
   local plugin_owned=$CM_PLUGIN_INSTALLED_BY_TOOL neutral_owned=$CM_NEUTRAL_CREATED nori_owned=$CM_NORI_INSTALLED_BY_TOOL senior_pre=$CM_SENIOR_PREEXISTING plugin_pre=$CM_PLUGIN_PREEXISTING_ENABLED installed_at
@@ -337,6 +340,7 @@ cm_use() {
   if [[ "$target" == senior ]]; then
     cm_plugin_disable "$plugin_id"
     cm_nori_switch senior-swe
+    cm_nori_apply_patches
   else
     cm_nori_switch "$CM_NEUTRAL_NAME"
     cm_plugin_enable "$plugin_id"

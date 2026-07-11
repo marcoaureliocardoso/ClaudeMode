@@ -79,7 +79,8 @@ The installation:
 6. installs Superpowers at Claude Code `local` scope;
 7. disables Superpowers;
 8. activates `senior-swe`;
-9. verifies the observed mode.
+9. applies smart patches for known upstream bugs in the skillset;
+10. verifies the observed mode.
 
 The operation is idempotent. Repeating `install` does not duplicate the plugin or the neutral skillset.
 
@@ -247,7 +248,7 @@ make verify
 
 Tests use fake executables in a temporary `PATH` and do not touch real Claude Code, Nori, or npm installations.
 
-Current behavioral coverage (11 tests):
+Current behavioral coverage (15 tests):
 
 - initial install;
 - idempotency;
@@ -260,7 +261,10 @@ Current behavioral coverage (11 tests):
 - failed switch rollback;
 - preexisting plugin restoration;
 - status without install;
-- json_tool error context.
+- json_tool error context;
+- smart patch application for all 11 upstream bugs;
+- patch idempotency (re-running install does not corrupt);
+- dry-run respects `--dry-run` flag for patches.
 
 ### Code Quality
 
@@ -278,6 +282,31 @@ The project enforces:
 - The JSON format of `claude plugin list --json` is defensively normalized, but future versions may introduce an incompatible format.
 - Nori keeps part of its behavior in global Claude Code configuration; other Nori projects should be considered before a global purge.
 - The JSON list merge removes entries added by Nori using structural equality. A manual change within the same entry may be preserved as a conflict.
+
+## Smart Patches
+
+`claude-mode` automatically applies fixes for 11 known upstream bugs in the `senior-swe@1.0.2` skillset published on the Nori registry. Patches run during `install` and `use senior`, and are **idempotent** — safe to re-run. Each patch checks whether the buggy pattern still exists before applying, so patches silently skip when upstream releases a fix.
+
+Bugs fixed:
+- Truncated sentence in Copilot Mode section of CLAUDE.md
+- Duplicate step numbering in code-reviewer agent
+- Skipped checklist steps in multiple skills
+- Broken references to nonexistent skills (`recall`, `memorize`, `nori-sync-docs`, `test-scenario-hygiene`, `nori-task-runner`)
+- YAML name mismatch in knowledge-researcher agent
+- Typo "Chnages" in change-documenter agent
+- Incorrect agent reference in CLAUDE.md
+
+### Standalone Patching
+
+A standalone script applies the same patches without requiring claude-mode:
+
+```bash
+scripts/nori-patch.sh --project /path/to/project
+scripts/nori-patch.sh --install-dir ~/.claude
+scripts/nori-patch.sh --dry-run --install-dir ~/.claude
+```
+
+GitHub issues tracking these bugs: [#541–#551](https://github.com/tilework-tech/nori-skillsets/issues?q=is%3Aissue+author%3Amarcoaureliocardoso).
 
 ## License
 

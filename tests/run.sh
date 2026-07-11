@@ -224,6 +224,108 @@ JSON
   assert_json "$LAST_OUTPUT" mode senior
 }
 
+test_patches_fix_all_known_bugs() {
+  setup_test_env
+  export MOCK_NORI_BUGGY_VERSION=1
+  project="$TEST_TMP/project"
+  mkdir -p "$project"
+  run_cli --project "$project" --allow-non-git --yes install
+  assert_status 0
+
+  # Bug 1: CLAUDE.md truncation fixed
+  assert_contains "$(cat "$project/.claude/CLAUDE.md")" "just on your terms"
+  ! grep -qE 'just on your$' "$project/.claude/CLAUDE.md" || fail 'truncated sentence not fixed in CLAUDE.md'
+
+  # Bug 2: no duplicate step 3 in code-reviewer
+  local dup_count
+  dup_count=$(grep -c '^3\. ' "$project/.claude/agents/nori-code-reviewer.md" 2>/dev/null || echo 0)
+  assert_eq 1 "$dup_count" "should have exactly one step 3 in code-reviewer"
+
+  # Bug 3: no skipped step 4 in creating-debug-tests
+  local steps
+  steps=$(grep -oP '^\d+\.' "$project/.claude/skills/creating-debug-tests-and-iterating/SKILL.md" 2>/dev/null | sort -n | tr '\n' ' ')
+  assert_contains "$steps" "4"
+
+  # Bug 4: no skipped step 7 in knowledge-researcher Phase 1
+  ! grep -q '^8\.' "$project/.claude/agents/paid-nori-knowledge-researcher.md" 2>/dev/null || fail 'step 8 not renumbered in knowledge-researcher'
+
+  # Bug 5: no recall/memorize references
+  ! grep -q 'recall/SKILL.md\|memorize/SKILL.md' "$project/.claude/agents/paid-nori-knowledge-researcher.md" 2>/dev/null || fail 'recall/memorize references not removed'
+
+  # Bug 6: no nori-sync-docs references
+  ! grep -q 'nori-sync-docs' "$project/.claude/agents/nori-initial-documenter.md" 2>/dev/null || fail 'nori-sync-docs ref not removed from initial-documenter'
+  ! grep -q 'nori-sync-docs' "$project/.claude/agents/nori-change-documenter.md" 2>/dev/null || fail 'nori-sync-docs ref not removed from change-documenter'
+
+  # Bug 7: no test-scenario-hygiene reference
+  ! grep -q 'test-scenario-hygiene' "$project/.claude/skills/finishing-a-development-branch/SKILL.md" 2>/dev/null || fail 'test-scenario-hygiene ref not removed'
+
+  # Bug 8: no nori-task-runner reference
+  ! grep -q 'nori-task-runner' "$project/.claude/skills/test-driven-development/SKILL.md" 2>/dev/null || fail 'nori-task-runner ref not removed'
+
+  # Bug 9: YAML name fixed
+  grep -q '^name: paid-nori-knowledge-researcher' "$project/.claude/agents/paid-nori-knowledge-researcher.md" 2>/dev/null || fail 'YAML name not fixed'
+
+  # Bug 10: typo fixed
+  ! grep -q 'Chnages' "$project/.claude/agents/nori-change-documenter.md" 2>/dev/null || fail 'typo Chnages not fixed'
+  grep -q 'Document Changes' "$project/.claude/agents/nori-change-documenter.md" 2>/dev/null || fail 'Document Changes not present after fix'
+
+  # Bug 11: CLAUDE.md references paid-nori-knowledge-researcher
+  ! grep -qE '(^|[^-])nori-knowledge-researcher([^-]|$)' "$project/.claude/CLAUDE.md" 2>/dev/null || fail 'knowledge-researcher ref not updated in CLAUDE.md'
+}
+
+test_patches_are_idempotent() {
+  setup_test_env
+  export MOCK_NORI_BUGGY_VERSION=1
+  project="$TEST_TMP/project"
+  mkdir -p "$project"
+  run_cli --project "$project" --allow-non-git --yes install
+  assert_status 0
+
+  # Capture checksums of ALL patched files after first install
+  local checksum1
+  checksum1=$(md5sum \
+    "$project/.claude/CLAUDE.md" \
+    "$project/.claude/agents/nori-code-reviewer.md" \
+    "$project/.claude/agents/paid-nori-knowledge-researcher.md" \
+    "$project/.claude/agents/nori-initial-documenter.md" \
+    "$project/.claude/agents/nori-change-documenter.md" \
+    "$project/.claude/skills/creating-debug-tests-and-iterating/SKILL.md" \
+    "$project/.claude/skills/finishing-a-development-branch/SKILL.md" \
+    "$project/.claude/skills/test-driven-development/SKILL.md" \
+    2>/dev/null | sort)
+
+  # Run install again (idempotent)
+  run_cli --project "$project" --allow-non-git --yes install
+  assert_status 0
+
+  # All file checksums must be unchanged — no double-patching
+  local checksum2
+  checksum2=$(md5sum \
+    "$project/.claude/CLAUDE.md" \
+    "$project/.claude/agents/nori-code-reviewer.md" \
+    "$project/.claude/agents/paid-nori-knowledge-researcher.md" \
+    "$project/.claude/agents/nori-initial-documenter.md" \
+    "$project/.claude/agents/nori-change-documenter.md" \
+    "$project/.claude/skills/creating-debug-tests-and-iterating/SKILL.md" \
+    "$project/.claude/skills/finishing-a-development-branch/SKILL.md" \
+    "$project/.claude/skills/test-driven-development/SKILL.md" \
+    2>/dev/null | sort)
+  assert_eq "$checksum1" "$checksum2" "second install should not modify already-patched files"
+}
+
+test_patches_respect_dry_run() {
+  setup_test_env
+  export MOCK_NORI_BUGGY_VERSION=1
+  project="$TEST_TMP/project"
+  mkdir -p "$project"
+  run_cli --project "$project" --allow-non-git --dry-run install
+  assert_status 0
+  # In dry-run, no files should be created
+  assert_file_not_exists "$project/.claude/CLAUDE.md"
+  assert_file_not_exists "$project/.claude/skills"
+  assert_file_not_exists "$project/.claude/agents"
+}
+
 if [[ "${1:-}" == "--worker" ]]; then
   case_name=${2:?missing test function}
   "$case_name"
@@ -243,6 +345,9 @@ CASE_LABELS=(
   preexisting_plugin_restored
   json_tool_error_context
   install_already_disabled
+  patches_fix_all_known_bugs
+  patches_are_idempotent
+  patches_respect_dry_run
 )
 CASE_FUNCTIONS=(
   test_install_and_status
@@ -257,6 +362,9 @@ CASE_FUNCTIONS=(
   test_preexisting_plugin_is_restored_on_uninstall
   test_json_tool_errors_include_command_context
   test_install_handles_already_disabled_plugin
+  test_patches_fix_all_known_bugs
+  test_patches_are_idempotent
+  test_patches_respect_dry_run
 )
 
 failures=0

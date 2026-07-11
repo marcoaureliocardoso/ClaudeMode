@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 
 # shellcheck disable=SC2034
-CM_VERSION="0.1.1"
+CM_VERSION="0.2.0"
 CM_DRY_RUN=${CM_DRY_RUN:-0}
 CM_VERBOSE=${CM_VERBOSE:-0}
 CM_ASSUME_YES=${CM_ASSUME_YES:-0}

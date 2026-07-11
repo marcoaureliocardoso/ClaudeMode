@@ -4,7 +4,7 @@ set -Eeuo pipefail
 ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 cd "$ROOT"
 
-shell_files=(bin/claude-mode install.sh scripts/verify.sh lib/*.sh tests/*.sh tests/helpers/*.sh)
+shell_files=(bin/claude-mode install.sh scripts/verify.sh scripts/nori-patch.sh lib/*.sh tests/*.sh tests/helpers/*.sh)
 bash -n "${shell_files[@]}"
 python3 -S -m py_compile lib/json_tool.py
 bash tests/run.sh
